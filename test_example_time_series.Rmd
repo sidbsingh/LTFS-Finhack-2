@@ -1,0 +1,142 @@
+---
+title: "example_time_series"
+author: "Sidharth"
+date: "24/01/2020"
+output: html_document
+---
+
+```{r}
+train_data = read.csv("/Users/sidharthsingh/Desktop/LTFS/train_set.csv", header = T, sep = ",", na.strings = c("NA", "?"))
+test_data = read.csv("/Users/sidharthsingh/Desktop/LTFS/test_set.csv", header = T, sep = ",", na.strings = c("NA", "?"))
+```
+
+```{r}
+head(train_data)
+```
+
+```{r}
+head(test_data)
+```
+
+```{r}
+dim(train_data)
+dim(test_data)
+```
+
+```{r}
+str(test_data)
+str(train_data)
+```
+
+```{r}
+table(train_data$segment)
+```
+```{r}
+train_data$segment = as.factor(train_data$segment)
+str(train_data)
+```
+
+```{r}
+table(train_data$branch_id)
+train_data$branch_id = NULL
+str(train_data)
+```
+
+```{r}
+table(train_data$state)
+```
+
+```{r}
+train_segment_1_data = train_data[train_data$segment == 1, ]
+train_segment_2_data = train_data[train_data$segment == 2, ]
+test_segment_1_data = test_data[test_data$segment == 1,]
+test_segment_2_data = test_data[test_data$segment == 2,]
+head(train_segment_1_data)
+```
+
+```{r}
+head(train_segment_2_data)
+```
+```{r}
+head(test_segment_1_data)
+```
+
+```{r}
+head(test_segment_2_data)
+```
+
+```{r}
+head(train_segment_1_data)
+train_segment_1_data = train_segment_1_data %>% group_by(application_date,segment) %>% summarise("case_count" = sum(case_count))
+head(train_segment_1_data)
+train_segment_2_data = train_segment_2_data %>% group_by(application_date, segment) %>% summarise("case_count" = sum(case_count))
+head(train_segment_2_data)
+```
+
+```{r}
+train_segment_1_data$application_date = as.Date(train_segment_1_data$application_date)
+train_segment_2_data$application_date = as.Date(train_segment_2_data$application_date)
+str(train_segment_1_data)
+train_segment_2_data$application_date = as.Date(train_segment_2_data$application_date)
+```
+
+
+```{r}
+train_segment_1_data = train_segment_1_data[order(train_segment_1_data$application_date, decreasing = F), ]
+head(train_segment_1_data)
+train_segment_2_data = train_segment_2_data[order(train_segment_2_data$application_date, decreasing = F), ]
+head(train_segment_2_data)
+```
+
+
+```{r}
+minDate = min(train_segment_1_data$application_date)
+maxDate = max(train_segment_1_data$application_date)
+minDate
+maxDate
+```
+
+```{r}
+seq = data.frame("application_date" = seq(minDate, maxDate, by = "days"))
+train_segment_1_data = seq %>% full_join(train_segment_1_data, c("application_date" = "application_date"))
+head(train_segment_1_data)
+```
+
+```{r}
+colSums(is.na(train_segment_1_data))
+```
+
+```{r}
+train_segment_1_data$case_count = (na.locf(train_segment_1_data$case_count, fromLast = F) + na.locf(train_segment_1_data$case_count, fromLast = T))/ 2
+head(train_segment_1_data)
+train_segment_1_data$segment = na.locf(train_segment_1_data$segment, fromLast = T)
+head(train_segment_1_data)
+colSums(is.na(train_segment_1_data))
+colSums(is.na(train_segment_2_data))
+```
+
+```{r}
+train_segment_1_data$time = 1:nrow(train_segment_1_data)
+head(train_segment_1_data)
+```
+
+```{r}
+plot(train_segment_1_data$case_count, type = "l", col = "blue")
+```
+
+```{r}
+lm_1_seg_1 = lm(case_count ~ time +, data = train_segment_1_data)
+summary(lm_1_seg_1)
+pred_train = predict(lm_1_seg_1)
+```
+ 
+```{r}
+plot(train_segment_1_data$case_count, type  = "l")
+points(train_segment_1_data$time, pred_train, type = "l", col = "red", lwd = 2)
+```
+
+```{r}
+train_error = regr.eval(train_segment_1_data$case_count, pred_train)
+train_error
+```
+
