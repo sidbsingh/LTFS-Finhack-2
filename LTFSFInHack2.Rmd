@@ -1,0 +1,1293 @@
+---
+title: "LTFS_FinHack"
+author: "Sidharth"
+date: "19/01/2020"
+output: html_document
+---
+
+# Removing Environment Variables
+```{r}
+rm(list = ls(all = T))
+```
+
+# Loading the Required Library
+
+```{r}
+library("DMwR")
+library("zoo")
+library("dplyr")
+library("TTR")
+library("forecast")
+#install.packages("tidyr")
+library("tidyr")
+```
+
+
+
+```{r}
+getwd()
+```
+
+# Setting the working Directory
+
+```{r}
+setwd("/Users/sidharthsingh/Desktop/LTFS")
+```
+
+```{r}
+getwd()
+```
+
+# Reading the data
+```{r}
+train_data = read.csv("train_set.csv", header = T, sep = ",", na.strings = c("NA", "?"))
+test_data = read.csv("test_set.csv", header = T, sep = ",", na.strings = c("NA", "?"))
+```
+
+## Checking the dimensions of the train and the test set
+
+```{r}
+dim(train_data)
+```
+
+```{r}
+dim(test_data)
+```
+
+```{r}
+head(train_data)
+```
+
+```{r}
+head(test_data)
+```
+
+## Checking the Structure of the dataset
+
+```{r}
+str(train_data)
+str(test_data)
+```
+
+```{r}
+summary(train_data)
+```
+
+```{r}
+summary(test_data)
+```
+
+
+```{r}
+table(train_data$segment)
+table(test_data$segment)
+```
+
+## Observations
+
+Seems that the segment is the categorical variable , but is wrongly predicted as int. So, we have to convert it into category
+
+```{r}
+train_data$segment = as.factor(train_data$segment)
+test_data$segment = as.factor(test_data$segment)
+```
+
+
+```{r}
+str(train_data)
+```
+
+```{r}
+str(test_data)
+```
+
+
+```{r}
+table(train_data$branch_id)
+```
+# Observation
+Each branch_id has same no of records. So, it's better to remove this column
+
+```{r}
+train_data$branch_id = NULL
+```
+
+# COnverting date to proper format
+
+```{r}
+train_data$application_date = as.Date(train_data$application_date)
+test_data$application_date = as.Date(test_data$application_date)
+```
+
+
+
+```{r}
+str(train_data)
+```
+
+```{r}
+str(test_data)
+```
+
+
+```{r}
+table(train_data$state)
+```
+
+## Observations 
+1) Maharashtra is most no of cases 11322
+2) Delhi has least no of cases 806
+
+## Checlking the summary of data
+
+```{r}
+summary(train_data)
+```
+
+## Observation
+
+The data is from 2017-04-01 to 2019-07-23 for the train data
+
+```{r}
+summary(test_data)
+```
+
+## Observation
+
+In test data the date is from 2019-07-06 to 2019-10-24
+
+## Sorting the data into increasing order of data
+
+```{r}
+train_data = train_data[order(train_data$application_date, decreasing = F), ]
+test_data = test_data[order(test_data$application_date, decreasing = F), ]
+```
+
+```{r}
+head(train_data)
+```
+
+```{r}
+head(test_data)
+```
+
+
+# Checking for missing values
+
+```{r}
+colSums(is.na(train_data))
+```
+
+# Seperating the data based on segment
+
+```{r}
+str(train_data)
+```
+
+```{r}
+train_segment_1_data = train_data[train_data$segment == 1, ]
+train_segment_2_data = train_data[train_data$segment == 2, ]
+test_segment_1_data = test_data[test_data$segment == 1,]
+test_segment_2_data = test_data[test_data$segment == 2,]
+```
+
+```{r}
+dim(train_segment_1_data)
+dim(train_segment_2_data)
+dim(train_data)
+dim(test_segment_1_data)
+dim(test_segment_2_data)
+dim(test_data)
+```
+
+```{r}
+head(train_segment_1_data, 30)
+head(train_segment_2_data, 30)
+```
+
+```{r}
+tail(train_segment_1_data, 30)
+tail(train_segment_2_data, 30)
+```
+
+## Dropping the segment column
+
+```{r}
+## train_segment_1_data$segment = NULL
+## train_segment_2_data$segment = NULL
+```
+
+
+```{r}
+summary(train_segment_1_data)
+summary(train_segment_2_data)
+```
+
+
+As we know that we need to make the prediction on a country level, we can drop the state and zone column as well 
+
+```{r}
+train_segment_1_data$state = NULL
+train_segment_1_data$zone = NULL
+train_segment_2_data$state = NULL
+train_segment_2_data$zone = NULL
+```
+
+```{r}
+str(train_segment_1_data)
+str(train_segment_2_data)
+```
+
+## Grouping the data by date and aggregating the case count for segment 1
+
+```{r}
+train_segment_1_data = train_segment_1_data %>% group_by(application_date, segment) %>% summarise("case_count" = sum(case_count))
+train_segment_1_data = data.frame(train_segment_1_data)
+```
+
+## Similarly grouping and aggregating the case_count for segment2
+
+```{r}
+train_segment_2_data = train_segment_2_data %>% group_by(application_date, segment) %>% summarise("case_count" = sum(case_count))
+train_segment_2_data = data.frame(train_segment_2_data)
+```
+
+```{r}
+dim(train_segment_1_data)
+dim(train_segment_2_data)
+```
+
+
+```{r}
+head(train_segment_1_data, 20)
+```
+  
+```{r}
+head(train_segment_2_data, 20)
+```
+
+```{r}
+tail(train_segment_1_data, 20)
+```
+
+```{r}
+tail(train_segment_2_data, 20)
+```
+
+## Checking for NA values in segment 1 and segment 2
+
+```{r}
+minDate = min(train_segment_1_data$application_date)
+maxDate = max(train_segment_1_data$application_date)
+minDate
+maxDate
+```
+
+Creating regular date sequence
+
+```{r}
+seq = data.frame("application_date" = seq(minDate, maxDate, by="days"))
+
+train_segment_1_data = seq %>% full_join(train_segment_1_data, c("application_date" = "application_date"))
+
+train_segment_1_data = data.frame(train_segment_1_data)
+
+rm(minDate, maxDate, seq)
+
+head(train_segment_1_data,10)
+```
+
+Checking total no of NA values
+
+```{r}
+colSums(is.na(train_segment_1_data))
+```
+
+Lets Check for NA values in segment 2 data
+
+```{r}
+minDate = min(train_segment_2_data$application_date)
+maxDate = max(train_segment_2_data$application_date)
+minDate
+maxDate
+```
+
+
+
+Creating regular date sequence for segment 2 data 
+
+```{r}
+seq2 = data.frame("application_date" = seq(minDate, maxDate, by="days"))
+
+train_segment_2_data = seq2 %>% full_join(train_segment_2_data, c("application_date" = "application_date"))
+
+train_segment_2_data = data.frame(train_segment_2_data)
+
+rm(minDate, maxDate, seq2)
+
+head(train_segment_2_data,10)
+```
+
+checking for NA values
+
+```{r}
+colSums(is.na(train_segment_2_data))
+```
+
+
+## Observations
+Here we can see that there are many NA values for segment 1 data and No Na values for the segment 2 data. So, now lets impute the NA values in segment 1
+
+
+## Imputing NA values in Segment 1 data
+
+```{r}
+train_segment_1_data$case_count = (na.locf(train_segment_1_data$case_count, fromLast = F) + na.locf(train_segment_1_data$case_count, fromLast = T))/2
+
+train_segment_1_data$segment = (na.locf(train_segment_1_data$segment, fromLast = T))
+```
+
+```{r}
+colSums(is.na(train_segment_1_data))
+```
+
+
+# Converting the data into time series object
+
+```{r}
+train_segment_1_data_ts = ts(train_segment_1_data$case_count, frequency = 365, start = c(2017, 4, 1))
+train_segment_2_data_ts = ts(train_segment_2_data$case_count, frequency = 365, start = c(2017, 4, 1))
+```
+
+
+```{r}
+train_segment_1_data_ts
+```
+
+```{r}
+train_segment_2_data_ts
+```
+
+
+## Plotting the Time Series Data for segment 1
+
+```{r}
+plot(train_segment_1_data_ts, 
+     type="l", lwd=1, col="blue", 
+     xlab="day", ylab="Case Count",
+     main="Total Daily Case Count")
+```
+
+## Plotting the time series data for segment 2
+
+```{r}
+plot(train_segment_2_data_ts, type = "l", col = "red", xlab = "Day", ylab = "Case Count", main = "Total Daily Case Count")
+```
+
+
+## Decomposed Time Series for segment 1
+
+```{r}
+train_segment_1_data_ts_decomposed = decompose(train_segment_1_data_ts)
+plot(train_segment_1_data_ts_decomposed)
+```
+
+Observation
+
+Here we can see that there exist both trend and seasonality(additive)
+
+## Decomposed Time Series for segment 1
+
+```{r}
+train_segment_2_data_ts_decomposed = decompose(train_segment_2_data_ts)
+plot(train_segment_2_data_ts_decomposed)
+```
+
+Observation 
+
+Here, we can see that the segment 2 data has both trend and seasonality
+
+
+## Creating Time variable 
+
+```{r}
+train_segment_1_data$time = 1:nrow(train_segment_1_data)
+train_segment_2_data$time = 1:nrow(train_segment_2_data)
+test_segment_1_data$time = 827:913
+test_segment_2_data$time = 845:937
+```
+
+
+```{r}
+head(train_segment_1_data)
+```
+
+```{r}
+head(train_segment_2_data)
+```
+
+```{r}
+head(test_segment_1_data)
+```
+
+```{r}
+head(test_segment_2_data)
+```
+
+
+Extracting day from the date for segment 1
+
+```{r}
+train_segment_1_data$Day = as.numeric(format(train_segment_1_data$application_date, format = "%d"))
+test_segment_1_data$Day = as.numeric(format(test_segment_1_data$application_date, format = "%d"))
+head(train_segment_1_data)
+head(test_segment_1_data)
+str(train_segment_1_data)
+str(test_segment_1_data)
+```
+
+
+Extracting day from the date for segment 2 
+
+```{r}
+train_segment_2_data$Day = as.numeric(format(train_segment_2_data$application_date, format = "%d"))
+test_segment_2_data$Day = as.numeric(format(test_segment_2_data$application_date, format = "%d"))
+head(train_segment_2_data)
+head(test_segment_2_data)
+```
+
+
+Changing day to factor 
+
+```{r}
+train_segment_1_data$Day = as.factor(train_segment_1_data$Day)
+train_segment_2_data$Day = as.factor(train_segment_2_data$Day)
+test_segment_1_data$Day = as.factor(test_segment_1_data$Day)
+test_segment_2_data$Day = as.factor(test_segment_2_data$Day)
+str(train_segment_1_data)
+str(train_segment_2_data)
+str(test_segment_1_data)
+str(test_segment_2_data)
+```
+
+# Simple Linear Regression with time for Segment 1
+
+```{r}
+str(train_segment_1_data)
+str(test_segment_1_data)
+```
+
+
+```{r}
+lm_1 = lm(case_count ~ time, data = train_segment_1_data)
+pred_Train_lm_1 = predict(lm_1, train_segment_1_data)
+pred_test = predict(lm_1, test_segment_1_data)
+```
+
+```{r}
+pred_test
+```
+```{r}
+test_segment_1_data_lm = test_segment_1_data
+test_segment_1_data_lm$case_count = pred_test
+head(test_segment_1_data_lm)
+```
+
+
+```{r}
+plot(train_segment_1_data$case_count, type = "l")
+points(train_segment_1_data$time, pred_Train_lm_1, type = "l", lwd = 2, col = "blue")
+```
+
+## Error Metric for LM_1
+
+```{r}
+lm_1_trainError = regr.eval(train_segment_1_data$case_count, pred_Train_lm_1)
+```
+
+```{r}
+lm_1_trainError
+```
+
+## Simple Linear Regression for Segment 2
+
+```{r}
+lm_1_segment_2 = lm(case_count ~ time , data = train_segment_2_data)
+pred_Train_lm_1_seg_2 = predict(lm_1_segment_2)
+pred_test_segment_2 = predict(lm_1_segment_2, test_segment_2_data)
+```
+
+```{r}
+plot(train_segment_2_data$case_count, type = 'l')
+points(train_segment_2_data$time, pred_Train_lm_1_seg_2, type = "l", col = "blue", lwd= 2)
+```
+
+
+```{r}
+pred_test_segment_2
+```
+
+```{r}
+test_segment_2_data_lm = test_segment_2_data
+test_segment_2_data_lm$case_count = pred_test_segment_2
+head(test_segment_2_data_lm)
+head(test_segment_1_data_lm)
+```
+
+Error Metric for simple linear regression on segment 2 data 
+
+```{r}
+lm_1_trainError_segment_2 = regr.eval(train_segment_2_data$case_count, pred_Train_lm_1_seg_2)
+lm_1_trainError_segment_2
+```
+
+
+## Joining segment 1 and 2 now
+
+```{r}
+total_test_data_lm = rbind(test_segment_1_data_lm, test_segment_2_data_lm)
+head(total_test_data_lm)
+tail(total_test_data_lm)
+```
+
+## Subsetting as per submission file
+
+```{r}
+submit_data_lm = total_test_data_lm[, c('id', 'application_date', 'segment', 'case_count')]
+head(submit_data_lm)
+tail(submit_data_lm)
+```
+
+
+## Writing to csv
+
+```{r}
+write.csv(submit_data_lm, file = "/Users/sidharthsingh/Desktop/LTFS/submit_data_lm.csv", row.names = F)
+```
+
+
+
+## Polynomial Regression (Quadratic) for segment 1
+
+```{r}
+Lm_poly = lm(case_count ~ poly(time, 2, raw = T), data = train_segment_1_data)
+pred_Train_Poly = predict(Lm_poly)
+pred_test_Poly = predict(Lm_poly, test_segment_1_data)
+```
+
+
+```{r}
+plot(train_segment_1_data$case_count, type = "l")
+points(train_segment_1_data$time, pred_Train_Poly, type = "l", col = "blue", lwd = 2)
+```
+
+## Error Metric for Polynomial Model for segment 1
+
+```{r}
+poly_lm_Train_Error = regr.eval(train_segment_1_data$case_count, pred_Train_Poly)
+```
+
+```{r}
+poly_lm_Train_Error
+```
+
+## Polynomial Regression (Quadratic) for segment 2
+
+```{r}
+Lm_poly_segment_2 = lm(formula = case_count ~ poly(time, 2, raw = T), data = train_segment_2_data)
+pred_Train_poly_seg_2 = predict(Lm_poly_segment_2)
+pred_test_Poly_seg_2 = predict(Lm_poly_segment_2, test_segment_2_data)
+```
+
+```{r}
+pred_test_Poly_seg_2
+```
+
+
+```{r}
+plot(train_segment_2_data$case_count, type = "l")
+points(train_segment_2_data$time, pred_Train_poly_seg_2, type = "l", col = "blue", lwd = 2)
+```
+
+Evaluation metric for Polynomial Regression for segment 2
+
+```{r}
+poly_lm_Train_Error_seg_2 = regr.eval(train_segment_2_data$case_count, pred_Train_poly_seg_2)
+poly_lm_Train_Error_seg_2
+```
+
+## Creating data for submission
+
+```{r}
+test_segment_1_data_poly = test_segment_1_data
+test_segment_1_data_poly$case_count = pred_test_Poly
+test_segment_2_data_poly = test_segment_2_data
+test_segment_2_data_poly$case_count = pred_test_Poly_seg_2
+total_test_data_poly = rbind(test_segment_1_data_poly, test_segment_2_data_poly)
+head(total_test_data_poly)
+tail(total_test_data_poly)
+
+submit_data_poly = total_test_data_poly[, c("id", "application_date", "segment", "case_count")]
+head(submit_data_poly)
+tail(submit_data_poly)
+write.csv(submit_data_poly, "/Users/sidharthsingh/Desktop/LTFS/submit_data_poly.csv", row.names = F)
+```
+
+
+
+## Seasonal Linear Regression using dummies for segment 1
+
+```{r}
+slm_1 = lm(case_count~ time + Day , data = train_segment_1_data)
+pred_Train_slm_1 = predict(slm_1)
+pred_test_slm_1 = predict(slm_1, test_segment_1_data)
+```
+
+```{r}
+plot(train_segment_1_data$case_count, type = "l")
+points(train_segment_1_data$time, pred_Train_slm_1, type = "l", col ="blue", lwd = "2")
+```
+
+## Error Metric for Seasonal Linear Regression for segment 1
+```{r}
+seasonal_lm_TrainError = regr.eval(train_segment_1_data$case_count, pred_Train_slm_1)
+seasonal_lm_TrainError
+```
+
+## Seasonal Linear regression with dummies for segment 2
+
+```{r}
+slm_1_segment_2 = lm(case_count ~ time + Day , data = train_segment_2_data)
+pred_Train_slm_1_seg_2 = predict(slm_1_segment_2)
+pred_test_slm_1_seg_2 = predict(slm_1_segment_2, test_segment_2_data)
+```
+
+```{r}
+plot(train_segment_2_data$case_count, type = "l")
+points(train_segment_2_data$time, pred_Train_slm_1_seg_2, type = "l", col = "blue", lwd = 2)
+```
+
+## Error metric for Seasonal Linear regression for segment 2
+
+```{r}
+seasonal_lm_TrainError_seg_2 = regr.eval(train_segment_2_data$case_count, pred_Train_slm_1_seg_2)
+seasonal_lm_TrainError_seg_2
+```
+
+## Creating the data for submission
+
+```{r}
+test_segment_1_data_slm = test_segment_1_data
+test_segment_1_data_slm$case_count = pred_test_slm_1
+test_segment_2_data_slm = test_segment_2_data
+test_segment_2_data_slm$case_count = pred_test_slm_1_seg_2
+total_test_data_slm = rbind(test_segment_1_data_slm, test_segment_2_data_slm)
+submit_data_slm = total_test_data_slm[, c("id", "application_date", "segment", "case_count")]
+write.csv(submit_data_slm, "/Users/sidharthsingh/Desktop/LTFS/submit_data_slm.csv", row.names = F)
+```
+
+
+
+## Seasonal polynomial Regression (Quadratic) for segment 1
+
+```{r}
+sLm_1_poly = lm(case_count ~ poly(time, 2, raw = T)+Day, data = train_segment_1_data)
+pred_Train_slm_1_poly = predict(sLm_1_poly)
+pred_test_slm_1_poly = predict(sLm_1_poly, test_segment_1_data)
+```
+
+```{r}
+plot(train_segment_1_data$case_count, type = "l")
+points(train_segment_1_data$time, pred_Train_slm_1_poly, type = "l", col = "blue", lwd =2)
+```
+
+## Error Metric for Seasonal Polynomial Regression (Quadratic)
+```{r}
+seasonal_lm_poly_TrainError = regr.eval(train_segment_1_data$case_count, pred_Train_slm_1_poly)
+seasonal_lm_poly_TrainError
+```
+
+## Seasonal Polynomial Regression (Quadratic) for segment 2
+
+```{r}
+sLm_1_poly_segment_2 = lm(case_count ~ poly(time, 2, raw = T) + Day, data = train_segment_2_data)
+pred_Train_slm_1_poly_seg_2 = predict(sLm_1_poly_segment_2)
+pred_test_slm_1_poly_seg_2 = predict(sLm_1_poly_segment_2, test_segment_2_data)
+```
+
+```{r}
+plot(train_segment_2_data$case_count, type = "l")
+points(train_segment_2_data$time, pred_Train_slm_1_poly_seg_2, type = "l", col = "blue", lwd = 2)
+```
+
+## Error Metrics of seasonal Polynomial regression (quadratic) for segment 2
+
+```{r}
+seasonal_slm_poly_TrainError_seg_2 = regr.eval(train_segment_2_data$case_count, pred_Train_slm_1_poly_seg_2)
+seasonal_slm_poly_TrainError_seg_2
+```
+
+## Creating Data for submission
+
+```{r}
+test_segment_1_data_slm_poly = test_segment_1_data
+test_segment_1_data_slm_poly$case_count = pred_test_slm_1_poly
+test_segment_2_data_slm_poly = test_segment_2_data
+test_segment_2_data_slm_poly$case_count = pred_test_slm_1_poly_seg_2
+total_test_data_slm_poly = rbind(test_segment_1_data_slm_poly, test_segment_2_data_slm_poly)
+submit_data_slm_poly = total_test_data_slm_poly[, c("id", "application_date", "segment", "case_count")]
+write.csv(submit_data_slm_poly, "/Users/sidharthsingh/Desktop/LTFS/submit_data_slm_poly.csv", row.names = F)
+```
+
+
+## Seasonal Regression cubic for segment 1
+
+```{r}
+sLm_1_cube = lm(case_count ~ poly(time, 3, raw = T)+Day, data = train_segment_1_data)
+pred_Train_slm_1_cube = predict(sLm_1_cube)
+pred_test_slm_1_cube = predict(sLm_1_cube, test_segment_1_data)
+```
+
+```{r}
+plot(train_segment_1_data$case_count, type = "l")
+points(train_segment_1_data$time, pred_Train_slm_1_cube, type = "l", col = "blue", lwd =2)
+```
+
+## Error Metric for Seasonal Polynomial Regression (cubic)
+```{r}
+seasonal_lm_poly_TrainError = regr.eval(train_segment_1_data$case_count, pred_Train_slm_1_cube)
+seasonal_lm_poly_TrainError
+```
+
+## Seasonal Regression cubic for segment 2
+
+```{r}
+sLm_1_cube_segment_2 = lm(case_count ~ poly(time, 3, raw = T) + Day, data = train_segment_2_data)
+pred_Train_slm_1_cube_seg_2 = predict(sLm_1_cube_segment_2)
+pred_test_slm_1_cube_seg_2 = predict(sLm_1_cube_segment_2, test_segment_2_data)
+```
+
+```{r}
+plot(train_segment_2_data$case_count, type = "l")
+points(train_segment_2_data$time, pred_Train_slm_1_cube_seg_2, type = "l", col = "blue", lwd = 2)
+```
+
+
+## Error Metrics of seasonal Polynomial regression (quadratic) for segment 2
+
+```{r}
+seasonal_slm_poly_TrainError_seg_2 = regr.eval(train_segment_2_data$case_count, pred_Train_slm_1_cube_seg_2)
+seasonal_slm_poly_TrainError_seg_2
+```
+
+## Creating Data for submission
+
+```{r}
+test_segment_1_data_slm_cube = test_segment_1_data
+test_segment_1_data_slm_cube$case_count = pred_test_slm_1_cube
+test_segment_2_data_slm_cube = test_segment_2_data
+test_segment_2_data_slm_cube$case_count = pred_test_slm_1_cube_seg_2
+total_test_data_slm_cube = rbind(test_segment_1_data_slm_cube, test_segment_2_data_slm_cube)
+submit_data_slm_cube = total_test_data_slm_poly[, c("id", "application_date", "segment", "case_count")]
+write.csv(submit_data_slm_cube, "/Users/sidharthsingh/Desktop/LTFS/submit_data_slm_cube.csv", row.names = F)
+```
+
+
+# Applying Simple Moving Averages 
+
+```{r}
+#fitsma_segment_1 = SMA(train_segment_1_data_ts, n = 2)
+#predsma_segment_1 = forecast(fitsma_segment_1, h = 4)
+#plot(predsma_segment_1)
+```
+
+```{r}
+#train_segment_1_data_ts
+```
+
+```{r}
+#fitsma_segment_1
+```
+
+Error Metric for SMA 
+
+```{r}
+#sma_segment_1_train_error = regr.eval(train_segment_1_data_ts[2:length(train_segment_1_data_ts)],fitsma_segment_1[2:length(train_segment_1_data_ts)])
+
+#sma_segment_1_Validate_error = regr.eval(train_segment_1_data_VALIDATE$Total_case_count, predsma_segment_1$fitted)
+```
+
+```{r}
+#3sma_segment_1_train_error
+```
+
+```{r}
+#sma_segment_1_Validate_error
+```
+
+
+## Applying Weighted Moving Average 
+
+```{r}
+#fitwma_segment_1 = WMA(train_segment_1_data_ts, n = 2, 1:2)
+#predwma_segment_1 = forecast(fitwma_segment_1, h = 4)
+#plot(predwma_segment_1)
+```
+
+```{r}
+#fitwma_segment_1
+```
+
+```{r}
+#predwma_segment_1
+```
+
+Error Metric for Weighted Moving Average
+
+```{r}
+#WMA_segment_1_Train_Error = regr.eval(train_segment_1_data_ts[2:length(train_segment_1_data_ts)], #fitwma_segment_1[2:length(train_segment_1_data_ts)])
+#WMA_segment_1_Validate_Error = regr.eval(train_segment_1_data_VALIDATE$Total_case_count, predwma_segment_1$fitted)
+```
+
+```{r}
+#WMA_segment_1_Train_Error
+```
+
+```{r}
+#WMA_segment_1_Validate_Error
+```
+
+
+## Applying Exponenential Moving Averages on Time Series data 
+```{r}
+#fitema_segment_1 = EMA(train_segment_1_data_ts, n= 2)
+#predema_segment_1 = forecast(fitema_segment_1, h = 4)
+#plot(predema_segment_1)
+```
+
+```{r}
+#fitema_segment_1
+```
+
+```{r}
+#predema_segment_1
+```
+
+Error Metric for Exponential Moving Averages
+
+```{r}
+#EMA_segment_1_Train_Error = regr.eval(train_segment_1_data_ts[2:length(train_segment_1_data_ts)], fitema_segment_1[2:length(train_segment_1_data_VALIDATE)])
+#EMA_segment_1_Validate_Error = regr.eval(train_segment_1_data_VALIDATE$Total_case_count, predema_segment_1$fitted)
+```
+
+```{r}
+#EMA_segment_1_Train_Error
+```
+
+```{r}
+#EMA_segment_1_Validate_Error
+```
+
+## Applying Holt Winters With Trend and Additive seasonality for segment 1
+
+```{r}
+HW_segment_1_add = HoltWinters(train_segment_1_data_ts)
+HW_segment_1_add
+```
+
+Prediction on Train 
+```{r}
+pred_train_hw_segment_1_add = data.frame(HW_segment_1_add$fitted)
+pred_train_hw_segment_1_add
+```
+
+```{r}
+predHW_segment_1_add = forecast(HW_segment_1_add, h = 87)
+plot(predHW_segment_1_add)
+```
+
+```{r}
+predHW_segment_1_add$fitted
+```
+
+# Error Metrics for Holt Winter with additive seasonality
+
+```{r}
+
+```
+
+
+## Holt winter with additive Seasonality for segment 2
+
+```{r}
+HW_segment_2_add = HoltWinters(train_segment_2_data_ts, seasonal = "additive")
+HW_segment_2_add
+```
+
+Prediction On Train
+
+```{r}
+pred_train_hw_segment_2_add = data.frame(HW_segment_2_add$fitted)
+pred_train_hw_segment_2_add
+```
+
+## Prediction on Test data
+
+```{r}
+predHW_segment_2_add = forecast(HW_segment_2_add, h = 93)
+plot(predHW_segment_2_add)
+```
+
+## Creating Data for submission
+
+```{r}
+test_segment_1_data_hw = test_segment_1_data
+test_segment_1_data_hw$case_count = as.numeric(predHW_segment_1_add$mean)
+test_segment_2_data_hw = test_segment_2_data
+test_segment_2_data_hw$case_count = as.numeric(predHW_segment_2_add$mean)
+total_test_data_hw = rbind(test_segment_1_data_hw, test_segment_2_data_hw)
+submit_data_hw = total_test_data_hw[, c("id", "application_date", "segment", "case_count")]
+write.csv(submit_data_hw, "/Users/sidharthsingh/Desktop/LTFS/submit_data_hw.csv", row.names = F)
+submit_data_hw[submit_data_hw$case_count < 0, ]
+```
+
+
+## HoltWinter with multiplicative Seasonality
+
+```{r}
+HW_segment_1_mul = HoltWinters(train_segment_1_data_ts, seasonal = "multiplicative")
+HW_segment_1_mul
+```
+```{r}
+pred_HW_mul_segment_1 = forecast(HW_segment_1_mul, h = 87)
+plot(pred_HW_mul_segment_1)
+```
+```{r}
+pred_HW_mul_segment_1$mean
+```
+
+
+## Holt Winters with multiplicative seasonality for segment 2
+
+```{r}
+HW_segment_2_mul = HoltWinters(train_segment_2_data_ts, seasonal = "multiplicative")
+pred_HW_mul_segment_2 = forecast(HW_segment_2_mul, h = 93)
+plot(pred_HW_mul_segment_2)
+pred_HW_mul_segment_2$mean
+```
+
+## Creating Data for submission
+
+```{r}
+test_segment_1_data_hw_mul = test_segment_1_data
+test_segment_1_data_hw_mul$case_count = as.numeric(pred_HW_mul_segment_1$mean)
+test_segment_2_data_hw_mul = test_segment_2_data
+test_segment_2_data_hw_mul$case_count = as.numeric(pred_HW_mul_segment_2$mean)
+total_test_data_hw_mul = rbind(test_segment_1_data_hw_mul, test_segment_2_data_hw_mul)
+submit_data_hw_mul = total_test_data_hw_mul[,c("id", "application_date", "segment", "case_count")]
+write.csv(submit_data_hw_mul, "/Users/sidharthsingh/Desktop/LTFS/submit_data_hw_mul.csc", row.names = F)
+head(submit_data_hw_mul)
+```
+
+
+
+
+
+# Trying a NEW Approach
+
+```{r}
+head(train_data)
+```
+
+
+```{r}
+train_data_seg_1_state = train_data[train_data$segment == 1,]
+train_data_seg_2_state = train_data[train_data$segment == 2,]
+head(train_data_seg_1_state)
+```
+
+```{r}
+head(train_data_seg_2_state)
+```
+
+```{r}
+train_data_seg_1_state = train_data_seg_1_state %>% group_by(application_date, segment, state) %>% summarise("case_count" = sum(case_count))
+head(train_data_seg_1_state)
+```
+
+## Splitting the date into year, month and date for segment 1
+
+```{r}
+train_data_seg_1_state = 
+  train_data_seg_1_state %>%
+  separate(application_date, sep="-", into = c("year", "month", "day"))
+
+head(train_data_seg_1_state, 30)
+```
+```{r}
+table(train_data_seg_1_state$year)
+```
+
+```{r}
+train_data_seg_1_state_2017 = train_data_seg_1_state[train_data_seg_1_state$year == "2017", ]
+train_data_seg_1_state_2018 = train_data_seg_1_state[train_data_seg_1_state$year == "2018", ]
+train_data_seg_1_state_2019 = train_data_seg_1_state[train_data_seg_1_state$year == "2019", ]
+head(train_data_seg_1_state_2018)
+```
+
+```{r}
+plot(train_data_seg_1_state_2018[train_data_seg_1_state_2018$month == "07", ]$day, train_data_seg_1_state_2018[train_data_seg_1_state_2018$month == "07", ]$case_count, xlab = "days", ylab = "case_count", col = train_data_seg_1_state$state)
+#legend(train_data_seg_1_state_2018[train_data_seg_1_state_2018$month == "07", ]$day,train_data_seg_1_state_2018[train_data_seg_1_state_2018$month == "07", ]$case_count, legend = train_data_seg_1_state$state )
+```
+
+## Applying Random Forest
+
+
+```{r}
+head(train_data)
+```
+
+```{r}
+train_data_random = train_data
+train_data_random$state = NULL
+train_data_random$zone = NULL
+train_data_random_seg_1 = train_data_random[train_data_random$segment == 1, ]
+train_data_random_seg_2 = train_data_random[train_data_random$segment == 2, ]
+head(train_data_random_seg_1)
+head(train_data_random_seg_2)
+```
+
+```{r}
+train_data_random_seg_1 = train_data_random_seg_1 %>% group_by(application_date, segment) %>% summarise("case_count" = sum(case_count))
+train_data_random_seg_2 = train_data_random_seg_2 %>% group_by(application_date, segment) %>% summarise("case_count" = sum(case_count))
+```
+
+```{r}
+head(train_data_random_seg_1)
+head(train_data_random_seg_2)
+```
+
+```{r}
+train_data_random_seg_1 = train_data_random_seg_1[order(train_data_random_seg_1$application_date, decreasing = F), ]
+train_data_random_seg_2 = train_data_random_seg_2[order(train_data_random_seg_2$application_date, decreasing = F), ]
+```
+
+```{r}
+head(train_data_random_seg_1)
+head(train_data_random_seg_2)
+```
+
+```{r}
+minDate_random = min(train_data_random_seg_1$application_date)
+maxDate_random = max(train_data_random_seg_1$application_date)
+minDate_random
+maxDate_random
+```
+
+```{r}
+seq = data.frame("application_date" = seq(minDate_random, maxDate_random, by="days"))
+
+train_data_random_seg_1 = seq %>% full_join(train_data_random_seg_1, c("application_date" = "application_date"))
+
+train_data_random_seg_1 = data.frame(train_data_random_seg_1)
+```
+
+```{r}
+minDate_random_seg_2 = min(train_data_random_seg_2$application_date)
+minDate_random_seg_2 = max(train_data_random_seg_2$application_date)
+minDate_random_seg_2
+minDate_random_seg_2
+```
+
+```{r}
+seq = data.frame("application_date" = seq(minDate_random_seg_2, minDate_random_seg_2, by="days"))
+
+train_data_random_seg_2 = seq %>% full_join(train_data_random_seg_2, c("application_date" = "application_date"))
+
+train_data_random_seg_2 = data.frame(train_data_random_seg_2)
+```
+
+```{r}
+head(train_data_random_seg_1)
+colSums(is.na(train_data_random_seg_1))
+```
+
+
+```{r}
+train_data_random_seg_1$case_count = (na.locf(train_data_random_seg_1$case_count, fromLast = F) + na.locf(train_data_random_seg_1$case_count, fromLast = T))/2
+train_data_random_seg_1$segment = na.locf(train_data_random_seg_1$segment, fromLast = T)
+head(train_data_random_seg_1)
+```
+
+
+```{r}
+train_data_random_seg_1 = train_data_random_seg_1 %>% separate(application_date, sep = "-", into = c("year", "month", "Day"))
+train_data_random_seg_2 = train_data_random_seg_2 %>% separate(application_date, sep = "-", into = c("year", "month", "Day"))
+head(train_data_random_seg_1)
+str(train_data_random_seg_1)
+```
+
+```{r}
+train_data_random_seg_1$year = as.factor(train_data_random_seg_1$year)
+train_data_random_seg_1$month = as.factor(train_data_random_seg_1$month)
+train_data_random_seg_1$day = as.factor(train_data_random_seg_1$Day)
+str(train_data_random_seg_1)
+train_data_random_seg_2$year = as.factor(train_data_random_seg_2$year)
+train_data_random_seg_2$month = as.factor(train_data_random_seg_2$month)
+train_data_random_seg_2$day = as.factor(train_data_random_seg_2$Day)
+str(train_data_random_seg_2)
+```
+
+```{r}
+train_data_random_seg_1$time = 1:nrow(train_data_random_seg_1)
+train_data_random_seg_2$time = 1:nrow(train_data_random_seg_2)
+```
+
+```{r}
+head(train_data_random_seg_1)
+tail(train_data_random_seg_1)
+head(train_data_random_seg_2)
+tail(train_data_random_seg_2)
+```
+
+```{r}
+head(test_segment_1_data)
+head(test_segment_2_data)
+```
+
+```{r}
+test_segment_1_data_random = test_segment_1_data
+test_segment_2_data_random = test_segment_2_data
+```
+
+```{r}
+head(test_segment_1_data_random)
+head(test_segment_2_data_random)
+```
+```{r}
+test_segment_1_data_random = test_segment_1_data_random %>% separate(application_date, sep = "-", into = c("year", "month"))
+test_segment_2_data_random = test_segment_2_data_random %>% separate(application_date, sep = "-", into = c("year", "month"))
+```
+```{r}
+head(test_segment_1_data_random)
+test_segment_1_data_random$year = as.factor(test_segment_1_data_random$year)
+test_segment_2_data_random$year = as.factor(test_segment_2_data_random$year)
+test_segment_1_data_random$month = as.factor(test_segment_1_data_random$month)
+test_segment_2_data_random$month = as.factor(test_segment_2_data_random$month)
+```
+
+
+```{r}
+str(test_segment_1_data_random)
+str(test_segment_2_data_random)
+```
+
+Applying Random Forest
+
+```{r}
+require(caTools)
+```
+
+```{r}
+#install.packages("randomForest")
+```
+```{r}
+library(randomForest)
+```
+
+```{r}
+str(train_data_random_seg_1)
+train_data_random_seg_1$day = NULL
+train_data_random_seg_1$year = as.numeric(train_data_random_seg_1$year)
+train_data_random_seg_1$month = as.numeric(train_data_random_seg_1$month)
+train_data_random_seg_1$Day = as.numeric(train_data_random_seg_1$month)
+test_segment_1_data_random$year = as.numeric(test_segment_1_data_random$year)
+test_segment_1_data_random$month = as.numeric(test_segment_1_data_random$month)
+test_segment_1_data_random$Day = as.numeric(test_segment_1_data_random$Day)
+```
+
+
+```{r}
+str(train_data_random_seg_1)
+str(test_segment_1_data_random)
+test_segment_1_data_random$id = NULL
+test_segment_1_data_random$segment = NULL
+train_data_random_seg_1$segment = NULL
+```
+
+```{r}
+rf_train_seg_1 = randomForest(case_count ~ month + Day + year + time, data = train_data_random_seg_1)
+pred_rf_train_seg_1 = predict(rf_train_seg_1)
+pred_rf_test_seg_1 = predict(rf_train_seg_1, test_segment_1_data_random)
+```
+
+```{r}
+str(train_data_random_seg_1)
+str(test_segment_1_data_random)
+```
+
+```{r}
+pred_rf_test_seg_1
+```
+
+## Applying Random forest on segment 2
+
+```{r}
+str(train_data_random_seg_2)
+str(test_segment_2_data_random)
+```
+
+
+```{r}
+train_data_random_seg_1$day = NULL
+train_data_random_seg_2$year = as.numeric(train_data_random_seg_2$year)
+train_data_random_seg_2$month = as.numeric(train_data_random_seg_2$month)
+train_data_random_seg_2$Day = as.numeric(train_data_random_seg_2$month)
+test_segment_2_data_random$year = as.numeric(test_segment_2_data_random$year)
+test_segment_2_data_random$month = as.numeric(test_segment_2_data_random$month)
+test_segment_2_data_random$Day = as.numeric(test_segment_2_data_random$Day)
+```
+
+
+```{r}
+str(train_data_random_seg_2)
+str(test_segment_2_data_random)
+test_segment_2_data_random$id = NULL
+test_segment_2_data_random$segment = NULL
+train_data_random_seg_2$segment = NULL
+train_data_random_seg_2$day = NULL
+```
+
+```{r}
+rf_train_seg_2 = randomForest(case_count ~ month + Day + year + time, data = train_data_random_seg_2)
+pred_rf_train_seg_2 = predict(rf_train_seg_2)
+pred_rf_test_seg_2 = predict(rf_train_seg_1, test_segment_2_data_random)
+pred_rf_test_seg_2
+```
+
+
+## Creating Data for Submission
+```{r}
+test_segment_1_data_rf = test_segment_1_data
+test_segment_1_data_rf$case_count = pred_rf_test_seg_1
+test_segment_2_data_rf = test_segment_2_data
+test_segment_2_data_rf$case_count = pred_rf_test_seg_2
+total_test_data_rf = rbind(test_segment_1_data_rf, test_segment_2_data_rf)
+submit_data_rf = total_test_data_rf[, c("id", "application_date", "segment", "case_count")]
+write.csv(submit_data_rf, "/Users/sidharthsingh/Desktop/LTFS/submit_data_rf.csv", row.names = F)
+```
+
+## Implementing ARIMA
+
+```{r}
+holiday_data = read.csv("/Users/sidharthsingh/Desktop/LTFS/holiday.csv", header = T, sep = ",", na.strings = c("NA", "?"))
+head(holiday_data)
+```
+
+```{r}
+holiday_data$holiday = 1
+nrow(holiday_data)
+```
+
+
+
